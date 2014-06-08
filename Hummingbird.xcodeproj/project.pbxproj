@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C63407E7193FCE670071DC29 /* http.swift in Sources */ = {isa = PBXBuildFile; fileRef = C63407E6193FCE670071DC29 /* http.swift */; };
+		C63407E9193FF1180071DC29 /* socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = C63407E8193FF1180071DC29 /* socket.swift */; };
 		C66817AD193E38BE00B23C92 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = C66817AC193E38BE00B23C92 /* main.swift */; };
 /* End PBXBuildFile section */
 
@@ -23,8 +25,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C63407E6193FCE670071DC29 /* http.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = http.swift; sourceTree = "<group>"; };
+		C63407E8193FF1180071DC29 /* socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = socket.swift; sourceTree = "<group>"; };
 		C66817A9193E38BE00B23C92 /* Hummingbird */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Hummingbird; sourceTree = BUILT_PRODUCTS_DIR; };
 		C66817AC193E38BE00B23C92 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		C66817B3193E945C00B23C92 /* Socket-Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "Socket-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +63,9 @@
 			isa = PBXGroup;
 			children = (
 				C66817AC193E38BE00B23C92 /* main.swift */,
+				C63407E8193FF1180071DC29 /* socket.swift */,
+				C63407E6193FCE670071DC29 /* http.swift */,
+				C66817B3193E945C00B23C92 /* Socket-Bridging-Header.h */,
 			);
 			path = Hummingbird;
 			sourceTree = "<group>";
@@ -119,6 +127,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				C66817AD193E38BE00B23C92 /* main.swift in Sources */,
+				C63407E7193FCE670071DC29 /* http.swift in Sources */,
+				C63407E9193FF1180071DC29 /* socket.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -233,6 +243,7 @@
 				C66817B2193E38BE00B23C92 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
