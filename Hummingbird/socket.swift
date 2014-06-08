@@ -9,55 +9,8 @@
 import Darwin
 
 enum Connection {
-    case Socket(CInt, sockaddr)
+    case Socket(CInt)
     case Error(String)
-    
-    func read(inout buffer: CChar[], inout bytesRead: Int?, fn: Connection -> () = {_ in ()}) -> Connection {
-        switch self {
-        case .Socket(let sock, let addr):
-            bytesRead = Darwin.read(sock, &buffer, UInt(buffer.count))
-            
-            if bytesRead < 0 {
-                return .Error(String.fromCString(strerror(errno)))
-            } else {
-                buffer[bytesRead!] = 0
-                var request = buffer.withUnsafePointerToElements {
-                    String.fromCString($0)
-                }
-                return self
-            }
-        case .Error:
-            return self
-        }
-    }
-    
-    func write(response: UInt8[], inout bytesWritten: UInt?, fn: Connection -> () = {_ in ()}) -> Connection {
-        switch self {
-        case .Socket(let sock, let addr):
-            let bytesWritten = Darwin.write(sock, response, UInt(response.count))
-            
-            if bytesWritten < 0 {
-                return .Error(String.fromCString(strerror(errno)))
-            } else {
-                return self
-            }
-        case .Error:
-            return self
-        }
-    }
-    
-    func close(fn: Connection -> () = {_ in ()}) -> Connection {
-        switch self {
-        case let .Socket(sock, _):
-            if Darwin.close(sock) != 0 {
-                return .Error(String.fromCString(strerror(errno)))
-            } else {
-                return self
-            }
-        case .Error:
-            return self
-        }
-    }
 }
 
 enum Socket {
@@ -74,7 +27,7 @@ enum Socket {
         }
     }
     
-    func connect(port: CUnsignedShort, address: CString = "127.0.0.1", fn: Socket -> () = {_ in ()}) -> Socket {
+    func connect(port: CUnsignedShort, address: CString = "127.0.0.1", fn: Socket -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             let addr = inet_addr(address)
@@ -94,14 +47,13 @@ enum Socket {
                 return .Error(String.fromCString(strerror(errno)))
             }
             
-            fn(self)
-            return self
+            return fn(self)
         case .Error:
             return self
         }
     }
 
-    func listen(limit: CInt = 128, fn: Socket -> () = {_ in ()}) -> Socket {
+    func listen(limit: CInt = 128, fn: Socket -> Socket = { $0 }) -> Socket {
         // Assert a willingness to listen to a socket with a maximum
         // length for the pending connection queue. Per the man page,
         // `limit` is silently limited to 128.
@@ -120,7 +72,7 @@ enum Socket {
         }
     }
     
-    func accept(fn: Connection -> () = {_ in ()}) -> Connection {
+    func accept(fn: (Connection, sockaddr) -> Connection = { c, _ in c }) -> Connection {
         switch self {
         case .Descriptor(let sock):
             var address = sockaddr()
@@ -130,16 +82,14 @@ enum Socket {
             if newSocket < 0 {
                 return .Error(String.fromCString(strerror(errno)))
             } else {
-                let socket: Connection = .Socket(newSocket, address)
-                fn(socket)
-                return socket
+                return fn(.Socket(newSocket), address)
             }
         case .Error(let str):
             return .Error(str) // self
         }
     }
     
-    func close(fn: Socket -> () = {_ in ()}) -> Socket {
+    func close(fn: Socket -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             if Darwin.close(sock) != 0 {
@@ -153,6 +103,98 @@ enum Socket {
     }
 }
 
+
+
+extension Socket: LogicValue {
+    func getLogicValue() -> Bool {
+        switch self {
+        case .Descriptor:
+            return true
+        case .Error:
+            return false
+        }
+    }
+}
+
+
+
+// Connection Extensions
+// ---------------------
+// Methods on the Connection enum are here because of the forward declaration
+// required for the Socket implementation.
+
+extension Connection {
+    func read(fn: (Connection, String) -> Connection = { c, _ in c }) -> Connection {
+        switch self {
+        case .Socket(let sock):
+            var buffer = new CChar[256]
+            let bytesRead = Darwin.read(sock, &buffer, UInt(buffer.count))
+            
+            if bytesRead < 0 {
+                return .Error(String.fromCString(strerror(errno)))
+            } else {
+                buffer[bytesRead] = 0
+                var request = buffer.withUnsafePointerToElements {
+                    String.fromCString($0)
+                }
+                return fn(self, request)
+            }
+        case .Error:
+            return self
+        }
+    }
+    
+    func write(response: String, fn: Connection -> Connection = { $0 }) -> Connection {
+        switch self {
+        case .Socket(let sock):
+            let bytesOut = UInt8[](response.utf8)
+            let bytesWritten = Darwin.write(sock, bytesOut, UInt(bytesOut.count))
+            
+            if bytesWritten < 0 {
+                return .Error(String.fromCString(strerror(errno)))
+            } else {
+                return fn(self)
+            }
+        case .Error:
+            return self
+        }
+    }
+    
+    func close(fn: Connection -> Connection = { $0 }) -> Connection {
+        switch self {
+        case let .Socket(sock):
+            if Darwin.close(sock) != 0 {
+                return .Error(String.fromCString(strerror(errno)))
+            } else {
+                return fn(self)
+            }
+        case .Error:
+            return self
+        }
+    }
+}
+
+
+
+extension Connection: LogicValue {
+    func getLogicValue() -> Bool {
+        switch self {
+        case .Socket:
+            return true
+        case .Error:
+            return false
+        }
+    }
+}
+
+
+
+// C sockaddr struct Extension
+// ---------------------------
+// The Swift type checker doesn't allow us to use sockaddr and sockaddr_in
+// interchangably, so the following extension destructures port and address
+// types and sets the appropriate bytes in sa_data to use with the socket
+// system calls.
 
 extension sockaddr {
     init () {
@@ -190,16 +232,5 @@ extension sockaddr {
     var addressString: String {
         let data = self.sa_data
         return "\(data.2).\(data.3).\(data.4).\(data.5)"
-    }
-}
-
-extension Socket: LogicValue {
-    func getLogicValue() -> Bool {
-        switch self {
-        case .Descriptor:
-            return true
-        case .Error:
-            return false
-        }
     }
 }

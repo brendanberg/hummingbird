@@ -13,35 +13,19 @@ println("Hello")
 var buffer = new CChar[256]
 var bytesRead: Int?
 
-var sock = Socket().connect(8000, address: "127.0.0.1").listen(limit:128).accept() { connection in
-    switch connection {
-    case .Socket(var sock2, var address):
-        let port = address.sin_port
-        let addr = address.addressString
-        
-        println("client port \(port)")
-        println("client addr \(addr)")
-        
-        let c = connection.read(&buffer, bytesRead: &bytesRead)
-        
-        switch c {
-        case .Socket(let s, let a):
-            buffer[bytesRead!] = 0
-            var request = buffer.withUnsafePointerToElements {
-                String.fromCString($0)
-            }
-            var arr = request.componentsSeparatedByString("\n")
-            var response: UInt8[] = UInt8[](("\n" + arr[0].uppercaseString).utf8)
-            var bytesWritten: UInt?
-            c.write(response.reverse(), bytesWritten: &bytesWritten)
-
-        case .Error:
-            return ()
-        }
-    case .Error:
-        return ()
-    }
-}
+var conn = Socket().connect(8000, address: "127.0.0.1").listen(limit:128).accept() { connection, address in
+    let port = address.sin_port
+    let addr = address.addressString
+    
+    println("client port \(port)")
+    println("client addr \(addr)")
+    
+    return connection
+}.read() { connection, inStr in
+    var arr = inStr.componentsSeparatedByString("\n")
+    var response = (arr[0].uppercaseString + "\n")
+    return connection.write(response)
+}.close()
 
 // Use this to quickly zero out memory if we reuse the same buffer per read
 // memset(&array, CInt(sizeof(CChar)) * CInt(array.count), 0)
@@ -55,18 +39,12 @@ var sock = Socket().connect(8000, address: "127.0.0.1").listen(limit:128).accept
 // var s: String = String.fromCString(charBuf)
 // println(s)
 
-switch sock {
-case .Socket:
-    switch sock.close() {
-    case .Error(let str):
-        println("Unable to close connection")
-        println("ERROR: \(str)")
-    default:
-        println("Goodbye")
-    }
+switch conn {
 case .Error(let str):
-    println("Finally.")
+    println("There was an error.")
     println("ERROR: \(str)")
+case .Socket:
+    println("Goodbye")
 }
 
 // kevent or kqueue
