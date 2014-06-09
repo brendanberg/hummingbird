@@ -9,7 +9,7 @@
 import Darwin
 
 enum Connection {
-    case Socket(CInt)
+    case Descriptor(CInt)
     case Error(String)
 }
 
@@ -82,7 +82,7 @@ enum Socket {
             if newSocket < 0 {
                 return .Error(String.fromCString(strerror(errno)))
             } else {
-                return fn(.Socket(newSocket), address)
+                return fn(.Descriptor(newSocket), address)
             }
         case .Error(let str):
             return .Error(str) // self
@@ -125,8 +125,21 @@ extension Socket: LogicValue {
 
 extension Connection {
     func read(fn: (Connection, String) -> Connection = { c, _ in c }) -> Connection {
+        
+        // Use this to quickly zero out memory if we reuse the same buffer per read
+        // memset(&array, CInt(sizeof(CChar)) * CInt(array.count), 0)
+        //
+        // This is less Swiftish but might be faster...
+        //
+        // var buff = calloc(UInt(sizeof(CChar)), 256)
+        // var n = read(conn, buff, 255)
+        // var charBuf = UnsafePointer<CChar>(buff)
+        // charBuf[n] = 0
+        // var s: String = String.fromCString(charBuf)
+        // println(s)
+        
         switch self {
-        case .Socket(let sock):
+        case .Descriptor(let sock):
             var buffer = new CChar[256]
             let bytesRead = Darwin.read(sock, &buffer, UInt(buffer.count))
             
@@ -134,10 +147,7 @@ extension Connection {
                 return .Error(String.fromCString(strerror(errno)))
             } else {
                 buffer[bytesRead] = 0
-                var request = buffer.withUnsafePointerToElements {
-                    String.fromCString($0)
-                }
-                return fn(self, request)
+                return fn(self, buffer.withUnsafePointerToElements { String.fromCString($0) })
             }
         case .Error:
             return self
@@ -146,7 +156,7 @@ extension Connection {
     
     func write(response: String, fn: Connection -> Connection = { $0 }) -> Connection {
         switch self {
-        case .Socket(let sock):
+        case .Descriptor(let sock):
             let bytesOut = UInt8[](response.utf8)
             let bytesWritten = Darwin.write(sock, bytesOut, UInt(bytesOut.count))
             
@@ -162,7 +172,7 @@ extension Connection {
     
     func close(fn: Connection -> Connection = { $0 }) -> Connection {
         switch self {
-        case let .Socket(sock):
+        case let .Descriptor(sock):
             if Darwin.close(sock) != 0 {
                 return .Error(String.fromCString(strerror(errno)))
             } else {
@@ -179,7 +189,7 @@ extension Connection {
 extension Connection: LogicValue {
     func getLogicValue() -> Bool {
         switch self {
-        case .Socket:
+        case .Descriptor:
             return true
         case .Error:
             return false
