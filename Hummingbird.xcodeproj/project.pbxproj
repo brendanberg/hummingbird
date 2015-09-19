@@ -29,7 +29,6 @@
 		C63407E8193FF1180071DC29 /* socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = socket.swift; sourceTree = "<group>"; };
 		C66817A9193E38BE00B23C92 /* Hummingbird */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Hummingbird; sourceTree = BUILT_PRODUCTS_DIR; };
 		C66817AC193E38BE00B23C92 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		C66817B3193E945C00B23C92 /* Socket-Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "Socket-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,7 +64,6 @@
 				C66817AC193E38BE00B23C92 /* main.swift */,
 				C63407E8193FF1180071DC29 /* socket.swift */,
 				C63407E6193FCE670071DC29 /* http.swift */,
-				C66817B3193E945C00B23C92 /* Socket-Bridging-Header.h */,
 			);
 			path = Hummingbird;
 			sourceTree = "<group>";

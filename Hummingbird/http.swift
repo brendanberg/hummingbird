@@ -5,13 +5,11 @@
 //  Created by Brendan Berg on 6/4/14.
 //  Copyright (c) 2014 NegativeZero. All rights reserved.
 //
-
 import Foundation
 
-
-@objc protocol RequestHandler {
-    @optional func get() -> HTTPResponse
-    @optional func post() -> HTTPResponse
+protocol RequestHandler {
+    func get() -> HTTPResponse
+    func post() -> HTTPResponse
 }
 
 @objc class HTTPRequest {
@@ -19,7 +17,7 @@ import Foundation
     var uri: String
     var version: String
     var headers: HTTPHeaders
-    var body: NSData?
+    var body: [UInt8]?
     
     
     init(method: String, uri: String, version: String = "1.1") {
@@ -36,7 +34,7 @@ import Foundation
 }
 
 class HTTPHeaders {
-    var headers: (String, String)[]
+    var headers: [(String, String)]
     
     func setHeader(name: String, value: String) {
         /*

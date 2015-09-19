@@ -7,10 +7,11 @@
 //
 
 // import Darwin
+import Foundation
 
 println("Hello")
 
-var conn = Socket().connect(8000, address: "127.0.0.1").listen(limit:128).accept() { connection, address in
+let conn = Socket().connect(8000, address: "127.0.0.1").listen(limit:128).accept() { connection, address in
     println("Accepted a connection from port \(address.addressString)")    
     return connection
 }.read() { connection, inStr in

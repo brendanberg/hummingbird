@@ -7,27 +7,47 @@
 //
 
 import Darwin
+import Foundation
 
+
+/**
+  Representation of a connected socket or error.
+  Either a Descriptor with an associated value for the POSIX
+  socket file descriptor or an Error with a string describing
+  the error.
+ */
 enum Connection {
     case Descriptor(CInt)
     case Error(String)
 }
 
+/**
+  Representation of a socket or error.
+  Either a Descriptor with an associated value for the POSIX
+  socket file descriptor or an Error with a string describing
+  the error.
+ */
 enum Socket {
     case Descriptor(CInt)
     case Error(String)
     
+    /**
+    Creates a new, unbound POSIX socket and encapsulates the file descriptor.
+    */
     init() {
         let newSocket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         
         if newSocket < 0 {
-            self = .Error(String.fromCString(strerror(errno)))
+            self = .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
         } else {
             self = .Descriptor(newSocket)
         }
     }
     
-    func connect(port: CUnsignedShort, address: CString = "127.0.0.1", fn: Socket -> Socket = { $0 }) -> Socket {
+    /**
+    Binds a socket to the specified port, listening on the interface specified by `address`.
+    */
+    func connect(port: CUnsignedShort, address: String = "127.0.0.1", fn: Socket -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             let addr = inet_addr(address)
@@ -44,7 +64,7 @@ enum Socket {
             let err = bind(sock, &server_addr, socklen_t(sizeof(sockaddr)))
             
             if err != 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
             }
             
             return fn(self)
@@ -53,17 +73,18 @@ enum Socket {
         }
     }
 
+    /**
+     Listens for connections on the socket, pulling from a queue with
+     a maximum length specified by `limit`. Per the man page, `limit`
+     is silently limited to 128.
+     */
     func listen(limit: CInt = 128, fn: Socket -> Socket = { $0 }) -> Socket {
-        // Assert a willingness to listen to a socket with a maximum
-        // length for the pending connection queue. Per the man page,
-        // `limit` is silently limited to 128.
-        
         switch self {
         case let .Descriptor(sock):
             let success = Darwin.listen(sock, limit)
             
             if success != 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
             } else {
                 return self
             }
@@ -72,6 +93,9 @@ enum Socket {
         }
     }
     
+    /**
+     Accepts a connection on a socket. Turns a Socket into a Connection.
+     */
     func accept(fn: (Connection, sockaddr) -> Connection = { c, _ in c }) -> Connection {
         switch self {
         case .Descriptor(let sock):
@@ -80,7 +104,7 @@ enum Socket {
             let newSocket = Darwin.accept(sock, &address, &length)
             
             if newSocket < 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
             } else {
                 return fn(.Descriptor(newSocket), address)
             }
@@ -89,13 +113,16 @@ enum Socket {
         }
     }
     
+    /**
+     Closes a connection.
+     */
     func close(fn: Socket -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             if Darwin.close(sock) != 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
             } else {
-                return self
+                return fn(self)
             }
         case .Error:
             return self
@@ -105,14 +132,21 @@ enum Socket {
 
 
 
-extension Socket: LogicValue {
-    func getLogicValue() -> Bool {
+extension Socket: BooleanType {
+    /**
+     Gets the logical value of the socket.
+    
+     Returns `true` if the Socket represents a valid descriptor
+     and `false` if the Socket represents an error.
+     */
+    var boolValue: Bool {
         switch self {
         case .Descriptor:
             return true
         case .Error:
             return false
         }
+
     }
 }
 
@@ -124,6 +158,14 @@ extension Socket: LogicValue {
 // required for the Socket implementation.
 
 extension Connection {
+    /**
+     Reads data from the connection. The data read from the connection is passed as
+     the second parameter to the success function.
+    
+     The `success` parameter is a function to be called upon successful reading.
+    
+     Returns a `Connection` monad
+     */
     func read(fn: (Connection, String) -> Connection = { c, _ in c }) -> Connection {
         
         // Use this to quickly zero out memory if we reuse the same buffer per read
@@ -140,28 +182,37 @@ extension Connection {
         
         switch self {
         case .Descriptor(let sock):
-            var buffer = new CChar[256]
-            let bytesRead = Darwin.read(sock, &buffer, UInt(buffer.count))
+            var buffer = [CChar](count: 1024, repeatedValue: 0)
+            //[CChar] = String().cStringUsingEncoding("UTF8")
+            let bytesRead = Darwin.read(sock, &buffer, 1023)
             
             if bytesRead < 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
             } else {
                 buffer[bytesRead] = 0
-                return fn(self, buffer.withUnsafePointerToElements { String.fromCString($0) })
+                let str = buffer.withUnsafeBufferPointer() { String.fromCString($0.baseAddress)! }
+                return fn(self, str)
             }
         case .Error:
             return self
         }
     }
     
+    /**
+     Writes the contents of a string to the connection.
+     
+     The `response` parameter is the string to be written; `success`
+     is the function to be called upon successful writing.
+    
+     Returns a `Connection` monad.
+     */
     func write(response: String, fn: Connection -> Connection = { $0 }) -> Connection {
         switch self {
         case .Descriptor(let sock):
-            let bytesOut = UInt8[](response.utf8)
-            let bytesWritten = Darwin.write(sock, bytesOut, UInt(bytesOut.count))
+            let bytesWritten = Darwin.write(sock, response, response.lengthOfBytesUsingEncoding(4)) // NSUTF8StringEncoding = 4
             
             if bytesWritten < 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
             } else {
                 return fn(self)
             }
@@ -170,11 +221,18 @@ extension Connection {
         }
     }
     
+    /**
+     Closes the connection.
+     
+     The `success` parameter is a function to be called upon successful closure of the connection.
+    
+     Returns A `Connection` monad.
+     */
     func close(fn: Connection -> Connection = { $0 }) -> Connection {
         switch self {
         case let .Descriptor(sock):
             if Darwin.close(sock) != 0 {
-                return .Error(String.fromCString(strerror(errno)))
+                return Connection.Error(String.fromCString(strerror(errno))!)
             } else {
                 return fn(self)
             }
@@ -186,8 +244,14 @@ extension Connection {
 
 
 
-extension Connection: LogicValue {
-    func getLogicValue() -> Bool {
+extension Connection : BooleanType {
+    /**
+     Gets the logical value of the connection.
+    
+     Returns `true` if the Connection represents a valid descriptor,
+     and `false` if the Connection represents an error
+     */
+    var boolValue : Bool {
         switch self {
         case .Descriptor:
             return true
@@ -214,10 +278,19 @@ extension sockaddr {
     }
 
     var sin_port: in_port_t {
+    /*! Gets the socket's port number by restructuring bytes in the sa_data field.
+     * \returns The socket's port number as a 16-bit unsigned integer
+     */
     get {
-        return (UInt16(sa_data.1.asUnsigned()) << 8) + UInt16(sa_data.0.asUnsigned())
+        // TODO: Make sure this is done in a machine-architecture indepenent way.
+        return (UInt16(sa_data.1) << 8) + UInt16(sa_data.0)
     }
+    /*! Sets the socket's port number by destructuring the first two bytes of the
+     *  sa_data field.
+     * \param newValue The port number as a 16-bit unsigned integer
+     */
     set {
+        // TODO: Make sure this is done in a machine-architecture indepenent way.
         sa_data.0 = CChar((newValue & 0xFF00) >> 8)
         sa_data.1 = CChar((newValue & 0x00FF) >> 0)
     }
@@ -227,11 +300,16 @@ extension sockaddr {
     var sin_addr: in_addr_t {
     get {
         return (
+            // Restructures bytes 3 through 6 of sa_data into a 32-bit unsigned
+            // integer IPv4 address
+            // TODO: This should probably go through ntohs() first.
             in_addr_t(sa_data.2) >> 00 + in_addr_t(sa_data.3) >> 08 +
             in_addr_t(sa_data.4) >> 16 + in_addr_t(sa_data.5) >> 24
         )
     }
     set {
+        // Destructures a 32-bit IPv4 address to set as bytes 3 through 6 of sa_data
+        // TODO: This should probably go through htons() first.
         sa_data.2 = CChar((newValue & 0x000000FF) >> 00)
         sa_data.3 = CChar((newValue & 0x0000FF00) >> 08)
         sa_data.4 = CChar((newValue & 0x00FF0000) >> 16)
@@ -239,6 +317,9 @@ extension sockaddr {
     }
     }
     
+    /**
+    The human-readable, dotted quad string representation of the socket's IPv4 address.
+    */
     var addressString: String {
         let data = self.sa_data
         return "\(data.2).\(data.3).\(data.4).\(data.5)"
