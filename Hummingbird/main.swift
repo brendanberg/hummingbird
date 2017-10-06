@@ -9,22 +9,22 @@
 // import Darwin
 import Foundation
 
-println("Hello")
+print("Hello")
 
-let conn = Socket().connect(8000, address: "127.0.0.1").listen(limit:128).accept() { connection, address in
-    println("Accepted a connection from port \(address.addressString)")    
+let conn = Socket().connect(port: 8000, address: "127.0.0.1").listen(limit:128).accept() { connection, address in
+    print("Accepted a connection from port \(address.addressString)")
     return connection
 }.read() { connection, inStr in
-    let arr = inStr.componentsSeparatedByString("\n")
-    let response = (arr[0].uppercaseString + "\n")
-    return connection.write(response)
+    let arr = inStr.components(separatedBy: "\n")
+    let response = (arr[0].uppercased() + "\n")
+    return connection.write(response: response)
 }.close()
 
 switch conn {
 case .Error(let str):
-    println("ERROR: \(str)")
+    print("ERROR: \(str)")
 case .Descriptor:
-    println("Goodbye")
+    print("Goodbye")
 }
 
 // kevent or kqueue

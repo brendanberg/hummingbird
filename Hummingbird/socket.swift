@@ -38,7 +38,7 @@ enum Socket {
         let newSocket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         
         if newSocket < 0 {
-            self = .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+            self = .Error(String(cString: strerror(errno)))
         } else {
             self = .Descriptor(newSocket)
         }
@@ -47,7 +47,7 @@ enum Socket {
     /**
     Binds a socket to the specified port, listening on the interface specified by `address`.
     */
-    func connect(port: CUnsignedShort, address: String = "127.0.0.1", fn: Socket -> Socket = { $0 }) -> Socket {
+    func connect(port: CUnsignedShort, address: String = "127.0.0.1", fn: (Socket) -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             let addr = inet_addr(address)
@@ -60,11 +60,11 @@ enum Socket {
             server_addr.sa_family = sa_family_t(AF_INET)
             server_addr.sin_port = port
             server_addr.sin_addr = addr
-            
-            let err = bind(sock, &server_addr, socklen_t(sizeof(sockaddr)))
+
+            let err = bind(sock, &server_addr, socklen_t(MemoryLayout<sockaddr>.size))
             
             if err != 0 {
-                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+                return .Error(String(cString: strerror(errno)))
             }
             
             return fn(self)
@@ -78,13 +78,13 @@ enum Socket {
      a maximum length specified by `limit`. Per the man page, `limit`
      is silently limited to 128.
      */
-    func listen(limit: CInt = 128, fn: Socket -> Socket = { $0 }) -> Socket {
+    func listen(limit: CInt = 128, fn: (Socket) -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             let success = Darwin.listen(sock, limit)
             
             if success != 0 {
-                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+                return .Error(String(cString: strerror(errno)))
             } else {
                 return self
             }
@@ -100,11 +100,11 @@ enum Socket {
         switch self {
         case .Descriptor(let sock):
             var address = sockaddr()
-            var length = socklen_t(sizeof(sockaddr))
+            var length = socklen_t(MemoryLayout<sockaddr>.size)
             let newSocket = Darwin.accept(sock, &address, &length)
             
             if newSocket < 0 {
-                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+                return .Error(String(cString: strerror(errno)))
             } else {
                 return fn(.Descriptor(newSocket), address)
             }
@@ -116,11 +116,11 @@ enum Socket {
     /**
      Closes a connection.
      */
-    func close(fn: Socket -> Socket = { $0 }) -> Socket {
+    func close(fn: (Socket) -> Socket = { $0 }) -> Socket {
         switch self {
         case let .Descriptor(sock):
             if Darwin.close(sock) != 0 {
-                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+                return .Error(String(cString: strerror(errno)))
             } else {
                 return fn(self)
             }
@@ -128,14 +128,10 @@ enum Socket {
             return self
         }
     }
-}
 
-
-
-extension Socket: BooleanType {
     /**
      Gets the logical value of the socket.
-    
+     
      Returns `true` if the Socket represents a valid descriptor
      and `false` if the Socket represents an error.
      */
@@ -146,10 +142,8 @@ extension Socket: BooleanType {
         case .Error:
             return false
         }
-
     }
 }
-
 
 
 // Connection Extensions
@@ -182,15 +176,15 @@ extension Connection {
         
         switch self {
         case .Descriptor(let sock):
-            var buffer = [CChar](count: 1024, repeatedValue: 0)
+            var buffer = [CChar](repeating: 0, count: 1024)
             //[CChar] = String().cStringUsingEncoding("UTF8")
             let bytesRead = Darwin.read(sock, &buffer, 1023)
             
             if bytesRead < 0 {
-                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+                return .Error(String(cString: strerror(errno)))
             } else {
                 buffer[bytesRead] = 0
-                let str = buffer.withUnsafeBufferPointer() { String.fromCString($0.baseAddress)! }
+                let str = buffer.withUnsafeBufferPointer() { String(cString: $0.baseAddress!) }
                 return fn(self, str)
             }
         case .Error:
@@ -206,13 +200,13 @@ extension Connection {
     
      Returns a `Connection` monad.
      */
-    func write(response: String, fn: Connection -> Connection = { $0 }) -> Connection {
+    func write(response: String, fn: (Connection) -> Connection = { $0 }) -> Connection {
         switch self {
         case .Descriptor(let sock):
-            let bytesWritten = Darwin.write(sock, response, response.lengthOfBytesUsingEncoding(4)) // NSUTF8StringEncoding = 4
+            let bytesWritten = Darwin.write(sock, response, response.lengthOfBytes(using: String.Encoding.utf8))
             
             if bytesWritten < 0 {
-                return .Error(String.fromCString(strerror(errno)) ?? "Unknown error")
+                return .Error(String(cString: strerror(errno)))
             } else {
                 return fn(self)
             }
@@ -228,11 +222,11 @@ extension Connection {
     
      Returns A `Connection` monad.
      */
-    func close(fn: Connection -> Connection = { $0 }) -> Connection {
+    func close(fn: (Connection) -> Connection = { $0 }) -> Connection {
         switch self {
         case let .Descriptor(sock):
             if Darwin.close(sock) != 0 {
-                return Connection.Error(String.fromCString(strerror(errno))!)
+                return Connection.Error(String(cString: strerror(errno)))
             } else {
                 return fn(self)
             }
@@ -240,14 +234,10 @@ extension Connection {
             return self
         }
     }
-}
-
-
-
-extension Connection : BooleanType {
+    
     /**
      Gets the logical value of the connection.
-    
+     
      Returns `true` if the Connection represents a valid descriptor,
      and `false` if the Connection represents an error
      */
@@ -260,7 +250,6 @@ extension Connection : BooleanType {
         }
     }
 }
-
 
 
 // C sockaddr struct Extension
@@ -299,13 +288,15 @@ extension sockaddr {
     
     var sin_addr: in_addr_t {
     get {
-        return (
-            // Restructures bytes 3 through 6 of sa_data into a 32-bit unsigned
-            // integer IPv4 address
-            // TODO: This should probably go through ntohs() first.
-            in_addr_t(sa_data.2) >> 00 + in_addr_t(sa_data.3) >> 08 +
-            in_addr_t(sa_data.4) >> 16 + in_addr_t(sa_data.5) >> 24
-        )
+        // Restructures bytes 3 through 6 of sa_data into a 32-bit unsigned
+        // integer IPv4 address
+        // TODO: This should probably go through ntohs() first.
+        let byte_1 = in_addr_t(sa_data.2) >> 00
+        let byte_2 = in_addr_t(sa_data.3) >> 08
+        let byte_3 = in_addr_t(sa_data.4) >> 16
+        let byte_4 = in_addr_t(sa_data.5) >> 24
+
+        return byte_1 + byte_2 + byte_3 + byte_4
     }
     set {
         // Destructures a 32-bit IPv4 address to set as bytes 3 through 6 of sa_data

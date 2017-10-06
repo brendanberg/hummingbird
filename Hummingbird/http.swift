@@ -12,7 +12,7 @@ protocol RequestHandler {
     func post() -> HTTPResponse
 }
 
-@objc class HTTPRequest {
+class HTTPRequest {
     var method: String
     var uri: String
     var version: String
@@ -29,7 +29,7 @@ protocol RequestHandler {
     }
 }
 
-@objc class HTTPResponse {
+class HTTPResponse {
     
 }
 
